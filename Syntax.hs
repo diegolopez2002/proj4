@@ -24,7 +24,6 @@ import qualified Test.QuickCheck as QC
 import Control.Monad(mapM_)
 import qualified Data.Char as Char
 import Test.HUnit
-import Data.Text.Prettyprint.Doc
 
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
