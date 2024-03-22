@@ -17,17 +17,18 @@ module Syntax where
 import Data.List(intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Text.PrettyPrint ( (<+>), Doc, text)
+import Text.PrettyPrint ( (<+>), Doc, text, ($$), punctuate)
 import qualified Text.PrettyPrint as PP
 import Test.QuickCheck(Arbitrary(..),Gen)
 import qualified Test.QuickCheck as QC
 import Control.Monad(mapM_)
 import qualified Data.Char as Char
-import Data.List (intersperse)
 import Test.HUnit
+import Data.Text.Prettyprint.Doc
 
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+
 
 {- |
 What is a miniDafny Program?
@@ -201,7 +202,7 @@ The derived `Show` instances for the datatypes above are pretty hard to
 read, especially when programs get long. Really, who wants to read this...
 
 >>> wAbs
-> Method "Abs" [("r",TInt)] [("absR",TInt)] [] (Block [If (Op2 (Var (Name "r")) Lt (Val (IntVal 0))) (Block [Assign (Name "absR") (Op1 Neg (Var (Name "r"))),Empty]) (Block [Assign (Name "absR") (Var (Name "r")),Empty])])
+Method "Abs" [("r",TInt)] [("absR",TInt)] [] (Block [If (Op2 (Var (Name "r")) Lt (Val (IntVal 0))) (Block [Assign (Name "absR") (Op1 Neg (Var (Name "r"))),Empty]) (Block [Assign (Name "absR") (Var (Name "r")),Empty])])
 
 instead of this...
 
@@ -403,6 +404,19 @@ level Minus  = 5
 level Conj   = 3
 level _      = 2    -- comparison operators
 
+
+intersperse' :: Doc -> [Doc] -> [Doc]
+intersperse' _ [] = []
+intersperse' sep [d] = [d]
+intersperse' sep (d:ds) = d : sep : intersperse' sep ds
+
+-- | Pretty print Bindings
+ppBinding :: Binding -> Doc
+ppBinding (x, t) = PP.text x <+> PP.char ':' <+> pp t
+
+doubleBraces :: Doc -> Doc
+doubleBraces doc = PP.braces (PP.braces doc)
+
 -- | TODO: Implement pretty printing for variables
 instance PP Var where
   pp (Name x)       = PP.text x
@@ -410,21 +424,21 @@ instance PP Var where
 
 -- | TODO: Implement pretty printing for blocks
 instance PP Block where
-  pp (Block stmts) = PP.braces (PP.vcat (map pp stmts))
+  pp (Block stmts) = PP.braces $ PP.hsep $ punctuate PP.semi $ map pp stmts
 
 -- | TODO: Implement the rest of pretty printing for statements.
 instance PP Statement where
-  pp Empty          = PP.empty
-  pp (Decl bind expr)  = PP.text "var" <+> pp bind <+> PP.char ':' <+> pp expr <+> PP.char ';'
-  pp (New bind expr)   = PP.text "var" <+> pp bind <+> PP.char ':' <+> pp TArrayInt <+> PP.text ":=" <+> PP.text "new" <+> pp expr <+> PP.char ';'
-  pp (Assert pred)     = PP.text "assert" <+> pp pred <+> PP.char ';'
-  pp (Assign var expr) = pp var <+> PP.text ":=" <+> pp expr <+> PP.char ';'
+  pp (Decl bind expr) = PP.text "var" <+> pp bind <+> PP.text ":=" <+> pp expr <+> PP.semi
+  pp (New bind expr) = PP.text "var" <+> pp bind <+> PP.text ":=" <+> PP.text "new" <+> pp expr <+> PP.semi
+  pp (Assert pred) = PP.text "assert" <+> pp pred <+> PP.semi
+  pp (Assign var expr) = pp var <+> PP.text ":=" <+> pp expr <+> PP.semi
   pp (If cond tBlock eBlock) =
-    PP.text "if" <+> PP.parens (pp cond) <+> PP.braces (pp tBlock) <+>
-    PP.text "else" <+> PP.braces (pp eBlock)
+    PP.text "if" <+> PP.parens (pp cond) <+> pp tBlock <+> PP.text "else" <+> pp eBlock
   pp (While preds cond block) =
-    PP.text "while" <+> PP.parens (PP.vcat (map pp preds) <+> PP.text "invariant" <+> pp cond) <+>
-    PP.braces (pp block)
+    PP.text "while" <+> PP.parens (pp cond) <+> PP.text "invariant" <+> PP.vcat (map pp preds) <+> pp block
+  pp Empty = PP.empty
+
+    
 
 -- | TODO: Implement pretty printing for predicates
 instance PP Predicate where
@@ -436,19 +450,12 @@ instance PP Predicate where
 instance PP Method where
   pp (Method name inputs outputs specs block) =
     PP.text "method" <+> PP.text name <+>
-    PP.parens (PP.hcat (intersperse' (PP.text ", ") (map ppBinding inputs))) <+>
+    PP.parens (PP.hsep $ punctuate (PP.text ", ") $ map pp inputs) <+>
     PP.text "returns" <+>
-    PP.parens (PP.hcat (intersperse' (PP.text ", ") (map ppBinding outputs))) <+>
-    PP.braces (PP.vcat (map pp specs ++ [pp block]))
+    PP.parens (PP.hsep $ punctuate (PP.text ", ") $ map pp outputs) <+>
+    -- Ensure double braces and correct semicolon placement outside
+    doubleBraces (PP.vcat (map pp specs ++ [pp block])) <+> PP.semi
 
-intersperse' :: Doc -> [Doc] -> [Doc]
-intersperse' _ [] = []
-intersperse' sep [d] = [d]
-intersperse' sep (d:ds) = d : sep : intersperse' sep ds
-
--- | Pretty print Bindings
-ppBinding :: Binding -> Doc
-ppBinding (x, t) = PP.text x <+> PP.char ':' <+> pp t
 
 instance PP Specification where
   pp (Requires pred)  = PP.text "requires" <+> pp pred <+> PP.char ';'
